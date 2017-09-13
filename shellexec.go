@@ -14,29 +14,29 @@ var ErrUnknownEscSeq = errors.New("unknown escape sequence")
 // Command parses line as a pseudo-shell command and returns
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
-	toks, err := scan(line)
+	fs, err := scan(line)
 	if err != nil {
 		return nil, err
 	}
 	envIndex := 0
-	for _, f := range toks {
+	for _, f := range fs {
 		if !strings.ContainsRune(f, '=') {
 			break
 		}
 		envIndex++
 	}
-	env := append(os.Environ(), toks[:envIndex]...)
-	toks = toks[envIndex:]
+	env := append(os.Environ(), fs[:envIndex]...)
+	fs = fs[envIndex:]
 
-	if len(toks) == 0 {
+	if len(fs) == 0 {
 		return nil, errors.New("empty command")
 	}
-	cmd := exec.Command(toks[0], toks[1:]...)
+	cmd := exec.Command(fs[0], fs[1:]...)
 	cmd.Env = env
 	return cmd, nil
 }
 
-func scan(s string) (tokens []string, err error) {
+func scan(s string) (fields []string, err error) {
 	var buf bytes.Buffer
 	esc := false
 	quot := false
@@ -62,7 +62,7 @@ func scan(s string) (tokens []string, err error) {
 		}
 		if unicode.IsSpace(r) {
 			if buf.Len() > 0 {
-				tokens = append(tokens, buf.String())
+				fields = append(fields, buf.String())
 				buf.Reset()
 			}
 			continue
@@ -80,7 +80,7 @@ func scan(s string) (tokens []string, err error) {
 		}
 	}
 	if buf.Len() > 0 {
-		tokens = append(tokens, buf.String())
+		fields = append(fields, buf.String())
 	}
-	return tokens, nil
+	return fields, nil
 }
