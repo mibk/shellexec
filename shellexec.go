@@ -52,7 +52,8 @@ func scan(s string) (fields []string, err error) {
 		if esc {
 			switch r {
 			case '|', '&', ';', '<', '>', '(', ')', '$',
-				'`', '\\', '"', '\'', ' ', '\t', '\n':
+				'`', '\\', '"', '\'', ' ', '\t', '\n',
+				'*', '?', '[', '#', '~', '=', '%':
 				buf.WriteRune(r)
 			default:
 				return nil, ErrUnknownEscSeq
@@ -73,7 +74,10 @@ func scan(s string) (fields []string, err error) {
 		case '\\':
 			esc = true
 			continue
-		case '|', '&', ';', '<', '>', '(', ')', '$', '`', '"':
+		case '|', '&', ';', '<', '>', '(', ')', '$', '`', '"',
+			// Forbid these characters which may need to be
+			// quoted under certain circumstances.
+			'*', '?', '[', '#', '~':
 			return nil, errors.New("unsupported character: " + string(r))
 		default:
 			buf.WriteRune(r)
