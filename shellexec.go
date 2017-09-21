@@ -99,10 +99,16 @@ func (p *parser) parseField() (string, error) {
 				return "", err
 			}
 			p.buf.WriteString(s)
+		case '"':
+			s, err := p.parseDoubleQuotes()
+			if err != nil {
+				return "", err
+			}
+			p.buf.WriteString(s)
 		case '\\':
 			esc = true
 			continue
-		case '|', '&', ';', '<', '>', '(', ')', '$', '`', '"',
+		case '|', '&', ';', '<', '>', '(', ')', '$', '`',
 			// Forbid these characters as they may need to be
 			// quoted under certain circumstances.
 			'*', '?', '[', '#', '~':
@@ -122,6 +128,37 @@ func (p *parser) parseSingleQuotes() (string, error) {
 			p.s = p.s[i+1:]
 			return str, nil
 		}
+	}
+	return "", ErrUnterminatedString
+}
+
+func (p *parser) parseDoubleQuotes() (string, error) {
+	var buf bytes.Buffer
+	var esc bool
+	for i, r := range p.s {
+		if esc {
+			switch r {
+			case '$', '`', '"', '\\':
+				buf.WriteRune(r)
+			case '\n':
+				// Do nothing.
+			default:
+				return "", ErrUnknownEscSeq
+			}
+			esc = false
+			continue
+		}
+		switch r {
+		case '"':
+			p.s = p.s[i+1:]
+			return buf.String(), nil
+		case '\\':
+			esc = true
+			continue
+		case '$', '`':
+			return "", errors.New("unsupported character inside string: " + string(r))
+		}
+		buf.WriteRune(r)
 	}
 	return "", ErrUnterminatedString
 }

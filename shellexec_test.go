@@ -34,6 +34,11 @@ func TestParseLine(t *testing.T) {
 			` X=3  Y=4  echo`,
 			"echo", nil, []string{"X=3", "Y=4"},
 		},
+		{
+			"double-quote string",
+			`echo "\\\"\$\` + "\n\\`" + `"`,
+			"echo", []string{`\"$` + "`"}, nil,
+		},
 	}
 
 	for _, tt := range tests {
@@ -73,9 +78,19 @@ func TestParseErrors(t *testing.T) {
 			"unknown escape sequence",
 		},
 		{
-			"unterminated single-quot string",
+			"unterminated single-quote string",
 			`echo 'always'be'closin`,
 			"string not terminated",
+		},
+		{
+			"unterminated double-quote string",
+			`echo "always"be"closin`,
+			"string not terminated",
+		},
+		{
+			"unsupported char in string",
+			"echo \"`echo this`\"",
+			"unsupported character inside string",
 		},
 	}
 
@@ -93,12 +108,13 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestParseInvalidChars(t *testing.T) {
-	invalid := []rune{'|', '&', ';', '<', '>', '(', ')', '$', '`', '"',
+	invalid := []rune{'|', '&', ';', '<', '>', '(', ')', '$', '`',
 		'*', '?', '[', '#', '~'}
 
 	for _, r := range invalid {
 		p := parser{s: string(r)}
-		if _, err := p.parseLine(); err == nil {
+		if _, err := p.parseLine(); err == nil ||
+			!strings.Contains(err.Error(), "unsupported") {
 			t.Errorf("char %q should be invalid", r)
 		}
 	}
