@@ -8,37 +8,51 @@ import (
 
 func TestParseLine(t *testing.T) {
 	tests := []struct {
-		name   string
-		line   string
-		tokens []string
+		name string
+		line string
+		cmd  string
+		args []string
+		env  []string
 	}{
 		{
 			"all escape chars",
 			`  echo  \|\&\;\<\>\(\)\$\\\"\'\ \	\` + "\n\\`",
-			[]string{"echo", `|&;<>()$\"'` + " \t\n`"},
+			"echo", []string{`|&;<>()$\"'` + " \t\n`"}, nil,
 		},
 		{
 			"single-quote strings",
 			`foo'bar''boo&;<>'`,
-			[]string{`foobarboo&;<>`},
+			`foobarboo&;<>`, nil, nil,
 		},
 		{
 			"other special characters",
-			`\*\?\[\#\~\=\%  =%`,
-			[]string{"*?[#~=%", "=%"},
+			`echo \*\?\[\#\~\=\%  =%`,
+			"echo", []string{"*?[#~=%", "=%"}, nil,
+		},
+		{
+			"env variables",
+			` X=3  Y=4  echo`,
+			"echo", nil, []string{"X=3", "Y=4"},
 		},
 	}
 
 	for _, tt := range tests {
 		p := parser{s: tt.line}
-		got, err := p.parseLine()
+		c, err := p.parseLine()
 		if err != nil {
 			t.Errorf("%s: unexpected err: %v", tt.name, err)
 			continue
 		}
-		if !reflect.DeepEqual(got, tt.tokens) {
-			t.Errorf("%s: got %q, want %q", tt.name, got, tt.tokens)
+		if c.cmd != tt.cmd {
+			t.Errorf("%s: cmd: got %q, want %q", tt.name, c.cmd, tt.cmd)
 		}
+		if !reflect.DeepEqual(c.args, tt.args) {
+			t.Errorf("%s: args: got %q, want %q", tt.name, c.args, tt.args)
+		}
+		if !reflect.DeepEqual(c.env, tt.env) {
+			t.Errorf("%s: env: got %q, want %q", tt.name, c.env, tt.env)
+		}
+
 	}
 }
 
@@ -48,6 +62,11 @@ func TestParseErrors(t *testing.T) {
 		line string
 		err  string
 	}{
+		{
+			"empty",
+			`  X=Y`,
+			"empty command",
+		},
 		{
 			"bad esc seq",
 			`date \e`,

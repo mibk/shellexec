@@ -3,7 +3,6 @@ package shellexec
 import (
 	"bytes"
 	"errors"
-	"os"
 	"os/exec"
 	"strings"
 	"unicode"
@@ -11,6 +10,7 @@ import (
 )
 
 var (
+	ErrEmptyCommand       = errors.New("empty command")
 	ErrUnknownEscSeq      = errors.New("unknown escape sequence")
 	ErrUnterminatedString = errors.New("string not terminated")
 )
@@ -19,26 +19,20 @@ var (
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
 	s := parser{s: line}
-	fs, err := s.parseLine()
+
+	c, err := s.parseLine()
 	if err != nil {
 		return nil, err
 	}
-	envIndex := 0
-	for _, f := range fs {
-		if !strings.ContainsRune(f, '=') {
-			break
-		}
-		envIndex++
-	}
-	env := append(os.Environ(), fs[:envIndex]...)
-	fs = fs[envIndex:]
-
-	if len(fs) == 0 {
-		return nil, errors.New("empty command")
-	}
-	cmd := exec.Command(fs[0], fs[1:]...)
-	cmd.Env = env
+	cmd := exec.Command(c.cmd, c.args...)
+	cmd.Env = c.env
 	return cmd, nil
+}
+
+type cmd struct {
+	cmd  string
+	args []string
+	env  []string
 }
 
 type parser struct {
@@ -46,20 +40,34 @@ type parser struct {
 	s   string
 }
 
-func (p *parser) parseLine() (fields []string, err error) {
+func (p *parser) parseLine() (cmd, error) {
+	var c cmd
 	for len(p.s) > 0 {
 		r, size := utf8.DecodeRuneInString(p.s)
-		if !unicode.IsSpace(r) {
-			f, err := p.parseField()
-			if err != nil {
-				return nil, err
-			}
-			fields = append(fields, f)
+		if unicode.IsSpace(r) {
+			p.s = p.s[size:]
 			continue
 		}
-		p.s = p.s[size:]
+
+		f, err := p.parseField()
+		if err != nil {
+			return cmd{}, err
+		}
+
+		if c.cmd == "" {
+			if strings.ContainsRune(f, '=') {
+				c.env = append(c.env, f)
+			} else {
+				c.cmd = f
+			}
+		} else {
+			c.args = append(c.args, f)
+		}
 	}
-	return fields, nil
+	if c.cmd == "" {
+		return cmd{}, ErrEmptyCommand
+	}
+	return c, nil
 }
 
 func (p *parser) parseField() (string, error) {
