@@ -30,9 +30,24 @@ func TestParseLine(t *testing.T) {
 			"echo", []string{"*?[#~=%", "=%"}, nil,
 		},
 		{
+			"escaped =",
+			`weird\=name`,
+			"weird=name", nil, nil,
+		},
+		{
 			"env variables",
-			` X=3  Y=4  echo`,
-			"echo", nil, []string{"X=3", "Y=4"},
+			` X=3  y=4  _12=5 echo Z=12`,
+			"echo", []string{"Z=12"}, []string{"X=3", "y=4", "_12=5"},
+		},
+		{
+			"invalid var",
+			`1=1`,
+			"1=1", nil, nil,
+		},
+		{
+			"invalid var 2",
+			`č=1`,
+			"č=1", nil, nil,
 		},
 		{
 			"double-quote string",

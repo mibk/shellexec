@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"os/exec"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -49,18 +48,20 @@ func (p *parser) parseLine() (cmd, error) {
 			continue
 		}
 
-		f, err := p.parseField()
-		if err != nil {
-			return cmd{}, err
-		}
-
 		if c.cmd == "" {
-			if strings.ContainsRune(f, '=') {
-				c.env = append(c.env, f)
+			v, err := p.parseVarAssign()
+			if err == errNotAssign {
+				c.cmd = v
+			} else if err != nil {
+				return cmd{}, err
 			} else {
-				c.cmd = f
+				c.env = append(c.env, v)
 			}
 		} else {
+			f, err := p.parseField()
+			if err != nil {
+				return cmd{}, err
+			}
 			c.args = append(c.args, f)
 		}
 	}
@@ -68,6 +69,22 @@ func (p *parser) parseLine() (cmd, error) {
 		return cmd{}, ErrEmptyCommand
 	}
 	return c, nil
+}
+
+var errNotAssign = errors.New("not assignment")
+
+func (p *parser) parseVarAssign() (string, error) {
+	v := p.parseIdent()
+	err := errNotAssign
+	if v != "" && p.s != "" && p.s[0] == '=' {
+		err = nil
+	}
+
+	f, err2 := p.parseField()
+	if err2 != nil {
+		return "", err2
+	}
+	return v + f, err
 }
 
 func (p *parser) parseField() (string, error) {
@@ -156,10 +173,25 @@ func (p *parser) parseDoubleQuotes() (string, error) {
 		case '\\':
 			esc = true
 			continue
-		case '$', '`':
+		case '$':
+		case '`':
 			return "", errors.New("unsupported character inside string: " + string(r))
 		}
 		buf.WriteRune(r)
 	}
 	return "", ErrUnterminatedString
+}
+
+func (p *parser) parseIdent() string {
+	var i int
+	var r rune
+	for i, r = range p.s {
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' ||
+			r == '_' || i > 0 && r >= '0' && r <= '9') {
+			break
+		}
+	}
+	v := p.s[:i]
+	p.s = p.s[i:]
+	return v
 }
