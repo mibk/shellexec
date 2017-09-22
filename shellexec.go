@@ -138,12 +138,13 @@ func (p *parser) parseDoubleQuotes() (string, error) {
 	for i, r := range p.s {
 		if esc {
 			switch r {
+			default:
+				buf.WriteRune('\\')
+				fallthrough
 			case '$', '`', '"', '\\':
 				buf.WriteRune(r)
 			case '\n':
 				// Do nothing.
-			default:
-				return "", ErrUnknownEscSeq
 			}
 			esc = false
 			continue

@@ -36,8 +36,8 @@ func TestParseLine(t *testing.T) {
 		},
 		{
 			"double-quote string",
-			`echo "\\\"\$\` + "\n\\`" + `"`,
-			"echo", []string{`\"$` + "`"}, nil,
+			`echo "\\\"\$\` + "\n\\`" + `\G"`,
+			"echo", []string{`\"$` + "`\\G"}, nil,
 		},
 	}
 
