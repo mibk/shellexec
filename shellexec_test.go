@@ -54,10 +54,22 @@ func TestParseLine(t *testing.T) {
 			`echo "\\\"\$\` + "\n\\`" + `\G"`,
 			"echo", []string{`\"$` + "`\\G"}, nil,
 		},
+		{
+			"variable expansion",
+			`X=$val  echo "$PATH$_A" $val'x3' $EDITOR`,
+			"echo", []string{"/usr/local/bin[A]", "3x3", "syd"}, []string{"X=3"},
+		},
+		{
+			"program from var",
+			`$EDITOR file:32`,
+			"syd", []string{"file:32"}, nil,
+		},
 	}
 
+	getenv := func(key string) string { return _Env[key] }
+
 	for _, tt := range tests {
-		p := parser{s: tt.line}
+		p := parser{s: tt.line, getenv: getenv}
 		c, err := p.parseLine()
 		if err != nil {
 			t.Errorf("%s: unexpected err: %v", tt.name, err)
@@ -74,6 +86,13 @@ func TestParseLine(t *testing.T) {
 		}
 
 	}
+}
+
+var _Env = map[string]string{
+	"PATH":   "/usr/local/bin",
+	"EDITOR": "syd",
+	"_A":     "[A]",
+	"val":    "3",
 }
 
 func TestParseErrors(t *testing.T) {
@@ -107,6 +126,26 @@ func TestParseErrors(t *testing.T) {
 			"echo \"`echo this`\"",
 			"unsupported character inside string",
 		},
+		{
+			"command substitution",
+			"echo $(cat file)",
+			"command substitution or arithmetic expansion",
+		},
+		{
+			"parameter expansion",
+			"echo ${var}",
+			"parameter expansion not supported",
+		},
+		{
+			"special parameter",
+			"echo $@",
+			"special parameters not supported",
+		},
+		{
+			"positional parameter",
+			"echo $1",
+			"positional parameters not supported",
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,7 +162,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestParseInvalidChars(t *testing.T) {
-	invalid := []rune{'|', '&', ';', '<', '>', '(', ')', '$', '`',
+	invalid := []rune{'|', '&', ';', '<', '>', '(', ')', '`',
 		'*', '?', '[', '#', '~'}
 
 	for _, r := range invalid {

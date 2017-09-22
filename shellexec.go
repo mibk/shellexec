@@ -3,6 +3,7 @@ package shellexec
 import (
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"unicode"
 	"unicode/utf8"
@@ -17,7 +18,7 @@ var (
 // Command parses line as a pseudo-shell command and returns
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
-	s := parser{s: line}
+	s := parser{s: line, getenv: os.Getenv}
 
 	c, err := s.parseLine()
 	if err != nil {
@@ -35,8 +36,9 @@ type cmd struct {
 }
 
 type parser struct {
-	buf bytes.Buffer
-	s   string
+	buf    bytes.Buffer
+	s      string
+	getenv func(key string) string
 }
 
 func (p *parser) parseLine() (cmd, error) {
@@ -125,7 +127,14 @@ func (p *parser) parseField() (string, error) {
 		case '\\':
 			esc = true
 			continue
-		case '|', '&', ';', '<', '>', '(', ')', '$', '`',
+		case '$':
+			v, err := p.parseVarExpr()
+			if err != nil {
+				return "", err
+			}
+			p.buf.WriteString(v)
+			continue
+		case '|', '&', ';', '<', '>', '(', ')', '`',
 			// Forbid these characters as they may need to be
 			// quoted under certain circumstances.
 			'*', '?', '[', '#', '~':
@@ -152,7 +161,10 @@ func (p *parser) parseSingleQuotes() (string, error) {
 func (p *parser) parseDoubleQuotes() (string, error) {
 	var buf bytes.Buffer
 	var esc bool
-	for i, r := range p.s {
+	for len(p.s) > 0 {
+		r, size := utf8.DecodeRuneInString(p.s)
+		p.s = p.s[size:]
+
 		if esc {
 			switch r {
 			default:
@@ -168,12 +180,17 @@ func (p *parser) parseDoubleQuotes() (string, error) {
 		}
 		switch r {
 		case '"':
-			p.s = p.s[i+1:]
 			return buf.String(), nil
 		case '\\':
 			esc = true
 			continue
 		case '$':
+			v, err := p.parseVarExpr()
+			if err != nil {
+				return "", err
+			}
+			buf.WriteString(v)
+			continue
 		case '`':
 			return "", errors.New("unsupported character inside string: " + string(r))
 		}
@@ -182,14 +199,36 @@ func (p *parser) parseDoubleQuotes() (string, error) {
 	return "", ErrUnterminatedString
 }
 
+func (p *parser) parseVarExpr() (string, error) {
+	if p.s != "" {
+		switch p.s[0] {
+		case '(':
+			return "", errors.New("command substitution or arithmetic expansion not supported")
+		case '{':
+			return "", errors.New("parameter expansion not supported")
+		case '@', '*', '#', '?', '-', '$', '!', '0':
+			return "", errors.New("special parameters not supported")
+		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			return "", errors.New("positional parameters not supported")
+		}
+	}
+
+	name := p.parseIdent()
+	if name == "" {
+		return "$", nil
+	}
+	return p.getenv(name), nil
+}
+
 func (p *parser) parseIdent() string {
 	var i int
-	var r rune
-	for i, r = range p.s {
+	for i < len(p.s) {
+		r, size := utf8.DecodeRuneInString(p.s[i:])
 		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' ||
 			r == '_' || i > 0 && r >= '0' && r <= '9') {
 			break
 		}
+		i += size
 	}
 	v := p.s[:i]
 	p.s = p.s[i:]
