@@ -15,7 +15,7 @@ var (
 	ErrUnterminatedString = errors.New("string not terminated")
 )
 
-// Command parses line as a pseudo-shell command and returns
+// Command parses line using a shell-like syntax and returns
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
 	s := parser{s: line, getenv: os.Getenv}
