@@ -11,7 +11,6 @@ import (
 
 var (
 	ErrEmptyCommand       = errors.New("empty command")
-	ErrUnknownEscSeq      = errors.New("unknown escape sequence")
 	ErrUnterminatedString = errors.New("string not terminated")
 )
 
@@ -97,14 +96,7 @@ func (p *parser) parseField() (string, error) {
 		p.s = p.s[size:]
 
 		if esc {
-			switch r {
-			case '|', '&', ';', '<', '>', '(', ')', '$',
-				'`', '\\', '"', '\'', ' ', '\t', '\n',
-				'*', '?', '[', '#', '~', '=', '%':
-				p.buf.WriteRune(r)
-			default:
-				return "", ErrUnknownEscSeq
-			}
+			p.buf.WriteRune(r)
 			esc = false
 			continue
 		}

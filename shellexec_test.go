@@ -51,8 +51,8 @@ func TestParseLine(t *testing.T) {
 		},
 		{
 			"double-quote string",
-			`echo "\\\"\$\` + "\n\\`" + `\G"`,
-			"echo", []string{`\"$` + "`\\G"}, nil,
+			`echo "\\\"\$\` + "\n\\`" + `\G" \e`,
+			"echo", []string{`\"$` + "`\\G", "e"}, nil,
 		},
 		{
 			"variable expansion",
@@ -105,11 +105,6 @@ func TestParseErrors(t *testing.T) {
 			"empty",
 			`  X=Y`,
 			"empty command",
-		},
-		{
-			"bad esc seq",
-			`date \e`,
-			"unknown escape sequence",
 		},
 		{
 			"unterminated single-quote string",
