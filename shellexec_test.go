@@ -16,7 +16,7 @@ func TestParseLine(t *testing.T) {
 	}{
 		{
 			"all escape chars",
-			`  echo  \|\&\;\<\>\(\)\$\\\"\'\ \	\` + "\n\\`",
+			`  echo  \|\&\;\<\>\(\)\$\\\"\'\ \	\` + "\n\\`\\",
 			"echo", []string{`|&;<>()$\"'` + " \t\n`"}, nil,
 		},
 		{
