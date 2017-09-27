@@ -168,3 +168,13 @@ func TestParseInvalidChars(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkParsingSimpleLine(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		p := parser{s: `VAR_A=aaa VAR_B=bbb echo 'all'work"and \"no\" \$play"`}
+		_, err := p.parseLine()
+		if err != nil {
+			b.Fatalf("unexpected err: %v", err)
+		}
+	}
+}
