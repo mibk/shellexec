@@ -55,6 +55,13 @@ func (p *parser) next() rune {
 	var size int
 	p.last, size = utf8.DecodeRuneInString(p.s)
 	p.s = p.s[size:]
+
+	if p.last == '\\' && p.s != "" && p.s[0] == '\n' {
+		// line continuation; remove it from the input
+		p.s = p.s[1:]
+		return p.next()
+	}
+
 	return p.last
 }
 
@@ -194,8 +201,6 @@ func (p *parser) parseDoubleQuotes() error {
 				fallthrough
 			case '$', '`', '"', '\\':
 				p.buf.WriteRune(r)
-			case '\n':
-				// Do nothing.
 			}
 			esc = false
 			continue

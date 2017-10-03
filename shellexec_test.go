@@ -17,7 +17,7 @@ func TestParseLine(t *testing.T) {
 		{
 			"all escape chars",
 			`  echo  \|\&\;\<\>\(\)\$\\\"\'\ \	\` + "\n\\`\\",
-			"echo", []string{`|&;<>()$\"'` + " \t\n`"}, nil,
+			"echo", []string{`|&;<>()$\"'` + " \t`"}, nil,
 		},
 		{
 			"single-quote strings",
@@ -63,6 +63,11 @@ func TestParseLine(t *testing.T) {
 			"program from var",
 			`$EDITOR file:32`,
 			"syd", []string{"file:32"}, nil,
+		},
+		{
+			"line continuation",
+			"VA\\\nRIABLE=X ech\\\no \\\n 'fo\\\no' bar\\\n",
+			"echo", []string{"foo", "bar"}, []string{"VARIABLE=X"},
 		},
 	}
 
