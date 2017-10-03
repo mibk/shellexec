@@ -37,33 +37,68 @@ type cmd struct {
 type parser struct {
 	buf    bytes.Buffer
 	s      string
+	last   rune
+	peeked *rune
 	getenv func(key string) string
+
+	identBuf bytes.Buffer
+}
+
+const eof rune = utf8.MaxRune + 1
+
+func (p *parser) next() rune {
+	if p.peeked != nil {
+		r := *p.peeked
+		p.peeked = nil
+		return r
+	}
+
+	if len(p.s) == 0 {
+		p.last = eof
+		return eof
+	}
+	var size int
+	p.last, size = utf8.DecodeRuneInString(p.s)
+	p.s = p.s[size:]
+	return p.last
+}
+
+func (p *parser) backup() {
+	p.peeked = &p.last
+}
+
+func (p *parser) token() string {
+	t := p.buf.String()
+	p.buf.Reset()
+	return t
 }
 
 func (p *parser) parseLine() (cmd, error) {
 	var c cmd
-	for len(p.s) > 0 {
-		r, size := utf8.DecodeRuneInString(p.s)
-		if unicode.IsSpace(r) {
-			p.s = p.s[size:]
+loop:
+	for {
+		r := p.next()
+		switch {
+		case unicode.IsSpace(r):
 			continue
+		case r == eof:
+			break loop
 		}
+		p.backup()
 
 		if c.cmd == "" {
-			v, err := p.parseVarAssign()
-			if err == errNotAssign {
-				c.cmd = v
+			if err := p.parseVarAssign(); err == errNotAssign {
+				c.cmd = p.token()
 			} else if err != nil {
 				return cmd{}, err
 			} else {
-				c.env = append(c.env, v)
+				c.env = append(c.env, p.token())
 			}
 		} else {
-			f, err := p.parseField()
-			if err != nil {
+			if err := p.parseField(); err != nil {
 				return cmd{}, err
 			}
-			c.args = append(c.args, f)
+			c.args = append(c.args, p.token())
 		}
 	}
 	if c.cmd == "" {
@@ -74,26 +109,28 @@ func (p *parser) parseLine() (cmd, error) {
 
 var errNotAssign = errors.New("not assignment")
 
-func (p *parser) parseVarAssign() (string, error) {
+func (p *parser) parseVarAssign() error {
 	v := p.parseIdent()
+	p.buf.WriteString(v)
 	err := errNotAssign
-	if v != "" && p.s != "" && p.s[0] == '=' {
+	if v != "" && p.next() == '=' {
 		err = nil
 	}
+	p.backup()
 
-	f, err2 := p.parseField()
-	if err2 != nil {
-		return "", err2
+	if err := p.parseField(); err != nil {
+		return err
 	}
-	return v + f, err
+	return err
 }
 
-func (p *parser) parseField() (string, error) {
-	p.buf.Reset()
+func (p *parser) parseField() error {
 	esc := false
-	for len(p.s) > 0 {
-		r, size := utf8.DecodeRuneInString(p.s)
-		p.s = p.s[size:]
+	for {
+		r := p.next()
+		if r == eof {
+			break
+		}
 
 		if esc {
 			p.buf.WriteRune(r)
@@ -105,65 +142,63 @@ func (p *parser) parseField() (string, error) {
 		}
 		switch r {
 		case '\'':
-			s, err := p.parseSingleQuotes()
-			if err != nil {
-				return "", err
+			if err := p.parseSingleQuotes(); err != nil {
+				return err
 			}
-			p.buf.WriteString(s)
 		case '"':
-			s, err := p.parseDoubleQuotes()
-			if err != nil {
-				return "", err
+			if err := p.parseDoubleQuotes(); err != nil {
+				return err
 			}
-			p.buf.WriteString(s)
 		case '\\':
 			esc = true
 			continue
 		case '$':
-			v, err := p.parseVarExpr()
-			if err != nil {
-				return "", err
+			if err := p.parseVarExpr(); err != nil {
+				return err
 			}
-			p.buf.WriteString(v)
+			p.backup()
 			continue
 		case '|', '&', ';', '<', '>', '(', ')', '`',
 			// Forbid these characters as they may need to be
 			// quoted under certain circumstances.
 			'*', '?', '[', '#', '~':
-			return "", errors.New("unsupported character: " + string(r))
+			return errors.New("unsupported character: " + string(r))
 		default:
 			p.buf.WriteRune(r)
 		}
 	}
-
-	return p.buf.String(), nil
+	return nil
 }
 
-func (p *parser) parseSingleQuotes() (string, error) {
-	for i, r := range p.s {
-		if r == '\'' {
-			str := p.s[:i]
-			p.s = p.s[i+1:]
-			return str, nil
+func (p *parser) parseSingleQuotes() error {
+	for {
+		switch r := p.next(); r {
+		case '\'':
+			return nil
+		case eof:
+			return ErrUnterminatedString
+		default:
+			p.buf.WriteRune(r)
 		}
 	}
-	return "", ErrUnterminatedString
+	panic("unreachable")
 }
 
-func (p *parser) parseDoubleQuotes() (string, error) {
-	var buf bytes.Buffer
+func (p *parser) parseDoubleQuotes() error {
 	var esc bool
-	for len(p.s) > 0 {
-		r, size := utf8.DecodeRuneInString(p.s)
-		p.s = p.s[size:]
+	for {
+		r := p.next()
+		if r == eof {
+			return ErrUnterminatedString
+		}
 
 		if esc {
 			switch r {
 			default:
-				buf.WriteRune('\\')
+				p.buf.WriteRune('\\')
 				fallthrough
 			case '$', '`', '"', '\\':
-				buf.WriteRune(r)
+				p.buf.WriteRune(r)
 			case '\n':
 				// Do nothing.
 			}
@@ -172,57 +207,54 @@ func (p *parser) parseDoubleQuotes() (string, error) {
 		}
 		switch r {
 		case '"':
-			return buf.String(), nil
+			return nil
 		case '\\':
 			esc = true
 			continue
 		case '$':
-			v, err := p.parseVarExpr()
-			if err != nil {
-				return "", err
+			if err := p.parseVarExpr(); err != nil {
+				return err
 			}
-			buf.WriteString(v)
 			continue
 		case '`':
-			return "", errors.New("unsupported character inside string: " + string(r))
+			return errors.New("unsupported character inside string: " + string(r))
 		}
-		buf.WriteRune(r)
+		p.buf.WriteRune(r)
 	}
-	return "", ErrUnterminatedString
+	panic("unreachable")
 }
 
-func (p *parser) parseVarExpr() (string, error) {
-	if p.s != "" {
-		switch p.s[0] {
-		case '(':
-			return "", errors.New("command substitution or arithmetic expansion not supported")
-		case '{':
-			return "", errors.New("parameter expansion not supported")
-		case '@', '*', '#', '?', '-', '$', '!', '0':
-			return "", errors.New("special parameters not supported")
-		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			return "", errors.New("positional parameters not supported")
-		}
+func (p *parser) parseVarExpr() error {
+	switch p.next() {
+	case '(':
+		return errors.New("command substitution or arithmetic expansion not supported")
+	case '{':
+		return errors.New("parameter expansion not supported")
+	case '@', '*', '#', '?', '-', '$', '!', '0':
+		return errors.New("special parameters not supported")
+	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return errors.New("positional parameters not supported")
 	}
+	p.backup()
 
-	name := p.parseIdent()
-	if name == "" {
-		return "$", nil
+	v := "$"
+	if name := p.parseIdent(); name != "" {
+		v = p.getenv(name)
 	}
-	return p.getenv(name), nil
+	p.buf.WriteString(v)
+	return nil
 }
 
 func (p *parser) parseIdent() string {
-	var i int
-	for i < len(p.s) {
-		r, size := utf8.DecodeRuneInString(p.s[i:])
-		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' ||
-			r == '_' || i > 0 && r >= '0' && r <= '9') {
-			break
+	p.identBuf.Reset()
+	for {
+		r := p.next()
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r == '_' ||
+			p.identBuf.Len() > 0 && r >= '0' && r <= '9') {
+			p.backup()
+			return p.identBuf.String()
 		}
-		i += size
+		p.identBuf.WriteRune(r)
 	}
-	v := p.s[:i]
-	p.s = p.s[i:]
-	return v
+	panic("unreachable")
 }
