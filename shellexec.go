@@ -9,11 +9,6 @@ import (
 	"unicode/utf8"
 )
 
-var (
-	ErrEmptyCommand       = errors.New("empty command")
-	ErrUnterminatedString = errors.New("string not terminated")
-)
-
 // Command parses line using a shell-like syntax and returns
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
@@ -102,7 +97,7 @@ loop:
 		}
 	}
 	if c.cmd == "" {
-		return cmd{}, ErrEmptyCommand
+		return cmd{}, errors.New("empty command")
 	}
 	return c, nil
 }
@@ -176,7 +171,7 @@ func (p *parser) parseSingleQuotes() error {
 		case '\'':
 			return nil
 		case eof:
-			return ErrUnterminatedString
+			return errors.New("string not terminated")
 		default:
 			p.buf.WriteRune(r)
 		}
@@ -189,7 +184,7 @@ func (p *parser) parseDoubleQuotes() error {
 	for {
 		r := p.next()
 		if r == eof {
-			return ErrUnterminatedString
+			return errors.New("string not terminated")
 		}
 
 		if esc {
