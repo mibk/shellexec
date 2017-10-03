@@ -12,9 +12,9 @@ import (
 // Command parses line using a shell-like syntax and returns
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
-	s := parser{s: line, getenv: os.Getenv}
+	p := parser{s: line, getenv: os.Getenv}
 
-	c, err := s.parseLine()
+	c, err := p.parseLine()
 	if err != nil {
 		return nil, err
 	}
