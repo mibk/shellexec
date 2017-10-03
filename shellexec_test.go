@@ -129,22 +129,22 @@ func TestParseErrors(t *testing.T) {
 		{
 			"command substitution",
 			"echo $(cat file)",
-			"command substitution or arithmetic expansion",
+			"command substitution '$(command)' or arithmetic expansion '$((expression))'",
 		},
 		{
 			"parameter expansion",
 			"echo ${var}",
-			"parameter expansion not supported",
+			"parameter expansion '${expression}' not supported",
 		},
 		{
 			"special parameter",
 			"echo $@",
-			"special parameters not supported",
+			"special parameters not supported: $@",
 		},
 		{
 			"positional parameter",
-			"echo $1",
-			"positional parameters not supported",
+			"echo $3",
+			"positional parameters not supported: $3",
 		},
 	}
 

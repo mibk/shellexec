@@ -225,15 +225,15 @@ func (p *parser) parseDoubleQuotes() error {
 }
 
 func (p *parser) parseVarExpr() error {
-	switch p.next() {
+	switch r := p.next(); r {
 	case '(':
-		return errors.New("command substitution or arithmetic expansion not supported")
+		return errors.New("command substitution '$(command)' or arithmetic expansion '$((expression))' not supported")
 	case '{':
-		return errors.New("parameter expansion not supported")
+		return errors.New("parameter expansion '${expression}' not supported")
 	case '@', '*', '#', '?', '-', '$', '!', '0':
-		return errors.New("special parameters not supported")
+		return errors.New("special parameters not supported: $" + string(r))
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		return errors.New("positional parameters not supported")
+		return errors.New("positional parameters not supported: $" + string(r))
 	}
 	p.backup()
 
