@@ -183,7 +183,6 @@ func (p *parser) parseSingleQuotes() error {
 			p.buf.WriteRune(r)
 		}
 	}
-	panic("unreachable")
 }
 
 func (p *parser) parseDoubleQuotes() error {
@@ -221,7 +220,6 @@ func (p *parser) parseDoubleQuotes() error {
 		}
 		p.buf.WriteRune(r)
 	}
-	panic("unreachable")
 }
 
 func (p *parser) parseVarExpr() error {
@@ -256,5 +254,4 @@ func (p *parser) parseIdent() string {
 		}
 		p.identBuf.WriteRune(r)
 	}
-	panic("unreachable")
 }
