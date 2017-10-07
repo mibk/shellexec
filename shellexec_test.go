@@ -71,11 +71,8 @@ func TestParseLine(t *testing.T) {
 		},
 	}
 
-	getenv := func(key string) string { return _Env[key] }
-
 	for _, tt := range tests {
-		p := parser{s: tt.line, getenv: getenv}
-		c, err := p.parseLine()
+		c, err := parseString(tt.line)
 		if err != nil {
 			t.Errorf("%s: unexpected err: %v", tt.name, err)
 			continue
@@ -91,13 +88,6 @@ func TestParseLine(t *testing.T) {
 		}
 
 	}
-}
-
-var _Env = map[string]string{
-	"PATH":   "/usr/local/bin",
-	"EDITOR": "syd",
-	"_A":     "[A]",
-	"val":    "3",
 }
 
 func TestParseErrors(t *testing.T) {
@@ -149,8 +139,7 @@ func TestParseErrors(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		p := parser{s: tt.line}
-		_, err := p.parseLine()
+		_, err := parseString(tt.line)
 		if err == nil {
 			t.Errorf("%s: unexpectadly succeeded", tt.name)
 			continue
@@ -166,8 +155,7 @@ func TestParseInvalidChars(t *testing.T) {
 		'*', '?', '[', '#', '~'}
 
 	for _, r := range invalid {
-		p := parser{s: string(r)}
-		if _, err := p.parseLine(); err == nil ||
+		if _, err := parseString(string(r)); err == nil ||
 			!strings.Contains(err.Error(), "unsupported") {
 			t.Errorf("char %q should be invalid", r)
 		}
@@ -176,10 +164,22 @@ func TestParseInvalidChars(t *testing.T) {
 
 func BenchmarkParsingSimpleLine(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		p := parser{s: `VAR_A=aaa VAR_B=bbb echo 'all'work"and \"no\" \$play"`}
-		_, err := p.parseLine()
+		_, err := parseString(`VAR_A=aaa VAR_B=bbb echo 'all'work"and \"no\" \$play"`)
 		if err != nil {
 			b.Fatalf("unexpected err: %v", err)
 		}
 	}
+}
+
+func parseString(s string) (cmd, error) {
+	getenv := func(key string) string { return _Env[key] }
+	p := parser{s: s, getenv: getenv}
+	return p.parseLine(), p.err
+}
+
+var _Env = map[string]string{
+	"PATH":   "/usr/local/bin",
+	"EDITOR": "syd",
+	"_A":     "[A]",
+	"val":    "3",
 }

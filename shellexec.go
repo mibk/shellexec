@@ -2,7 +2,7 @@ package shellexec
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"unicode"
@@ -13,10 +13,9 @@ import (
 // the os/exec.Cmd struct to execute the line.
 func Command(line string) (*exec.Cmd, error) {
 	p := parser{s: line, getenv: os.Getenv}
-
-	c, err := p.parseLine()
-	if err != nil {
-		return nil, err
+	c := p.parseLine()
+	if p.err != nil {
+		return nil, p.err
 	}
 	cmd := exec.Command(c.cmd, c.args...)
 	cmd.Env = c.env
@@ -35,6 +34,7 @@ type parser struct {
 	last   rune
 	peeked *rune
 	getenv func(key string) string
+	err    error
 
 	identBuf bytes.Buffer
 }
@@ -75,7 +75,15 @@ func (p *parser) token() string {
 	return t
 }
 
-func (p *parser) parseLine() (cmd, error) {
+func (p *parser) errorf(format string, args ...interface{}) {
+	if p.err != nil {
+		return
+	}
+	p.s = p.s[:0]
+	p.err = fmt.Errorf(format, args...)
+}
+
+func (p *parser) parseLine() cmd {
 	var c cmd
 loop:
 	for {
@@ -89,44 +97,34 @@ loop:
 		p.backup()
 
 		if c.cmd == "" {
-			if err := p.parseVarAssign(); err == errNotAssign {
-				c.cmd = p.token()
-			} else if err != nil {
-				return cmd{}, err
-			} else {
+			if isVarAssign := p.parseVarAssign(); isVarAssign {
 				c.env = append(c.env, p.token())
+			} else {
+				c.cmd = p.token()
 			}
 		} else {
-			if err := p.parseField(); err != nil {
-				return cmd{}, err
-			}
+			p.parseField()
 			c.args = append(c.args, p.token())
 		}
 	}
 	if c.cmd == "" {
-		return cmd{}, errors.New("empty command")
+		p.errorf("empty command")
 	}
-	return c, nil
+	return c
 }
 
-var errNotAssign = errors.New("not assignment")
-
-func (p *parser) parseVarAssign() error {
+func (p *parser) parseVarAssign() (isVarAssign bool) {
 	v := p.parseIdent()
 	p.buf.WriteString(v)
-	err := errNotAssign
 	if v != "" && p.next() == '=' {
-		err = nil
+		isVarAssign = true
 	}
 	p.backup()
-
-	if err := p.parseField(); err != nil {
-		return err
-	}
-	return err
+	p.parseField()
+	return
 }
 
-func (p *parser) parseField() error {
+func (p *parser) parseField() {
 	esc := false
 	for {
 		r := p.next()
@@ -144,53 +142,48 @@ func (p *parser) parseField() error {
 		}
 		switch r {
 		case '\'':
-			if err := p.parseSingleQuotes(); err != nil {
-				return err
-			}
+			p.parseSingleQuotes()
 		case '"':
-			if err := p.parseDoubleQuotes(); err != nil {
-				return err
-			}
+			p.parseDoubleQuotes()
 		case '\\':
 			esc = true
 			continue
 		case '$':
-			if err := p.parseVarExpr(); err != nil {
-				return err
-			}
+			p.parseVarExpr()
 			p.backup()
 			continue
 		case '|', '&', ';', '<', '>', '(', ')', '`',
 			// Forbid these characters as they may need to be
 			// quoted under certain circumstances.
 			'*', '?', '[', '#', '~':
-			return errors.New("unsupported character: " + string(r))
+			p.errorf("unsupported character: " + string(r))
 		default:
 			p.buf.WriteRune(r)
 		}
 	}
-	return nil
 }
 
-func (p *parser) parseSingleQuotes() error {
+func (p *parser) parseSingleQuotes() {
 	for {
 		switch r := p.next(); r {
 		case '\'':
-			return nil
+			return
 		case eof:
-			return errors.New("string not terminated")
+			p.errorf("string not terminated")
+			return
 		default:
 			p.buf.WriteRune(r)
 		}
 	}
 }
 
-func (p *parser) parseDoubleQuotes() error {
+func (p *parser) parseDoubleQuotes() {
 	var esc bool
 	for {
 		r := p.next()
 		if r == eof {
-			return errors.New("string not terminated")
+			p.errorf("string not terminated")
+			return
 		}
 
 		if esc {
@@ -206,32 +199,30 @@ func (p *parser) parseDoubleQuotes() error {
 		}
 		switch r {
 		case '"':
-			return nil
+			return
 		case '\\':
 			esc = true
 			continue
 		case '$':
-			if err := p.parseVarExpr(); err != nil {
-				return err
-			}
+			p.parseVarExpr()
 			continue
 		case '`':
-			return errors.New("unsupported character inside string: " + string(r))
+			p.errorf("unsupported character inside string: " + string(r))
 		}
 		p.buf.WriteRune(r)
 	}
 }
 
-func (p *parser) parseVarExpr() error {
+func (p *parser) parseVarExpr() {
 	switch r := p.next(); r {
 	case '(':
-		return errors.New("command substitution '$(command)' or arithmetic expansion '$((expression))' not supported")
+		p.errorf("command substitution '$(command)' or arithmetic expansion '$((expression))' not supported")
 	case '{':
-		return errors.New("parameter expansion '${expression}' not supported")
+		p.errorf("parameter expansion '${expression}' not supported")
 	case '@', '*', '#', '?', '-', '$', '!', '0':
-		return errors.New("special parameters not supported: $" + string(r))
+		p.errorf("special parameters not supported: $" + string(r))
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		return errors.New("positional parameters not supported: $" + string(r))
+		p.errorf("positional parameters not supported: $" + string(r))
 	}
 	p.backup()
 
@@ -240,7 +231,6 @@ func (p *parser) parseVarExpr() error {
 		v = p.getenv(name)
 	}
 	p.buf.WriteString(v)
-	return nil
 }
 
 func (p *parser) parseIdent() string {
