@@ -136,6 +136,16 @@ func TestParseErrors(t *testing.T) {
 			"echo $3",
 			"positional parameters not supported: $3",
 		},
+		{
+			"'`' inside string",
+			"echo \"`head -1 file`\"",
+			"unsupported character inside string: `",
+		},
+		{
+			"unsupported character",
+			"cat file | sort",
+			"unsupported character: |",
+		},
 	}
 
 	for _, tt := range tests {

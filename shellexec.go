@@ -156,7 +156,7 @@ func (p *parser) parseField() {
 			// Forbid these characters as they may need to be
 			// quoted under certain circumstances.
 			'*', '?', '[', '#', '~':
-			p.errorf("unsupported character: " + string(r))
+			p.errorf("unsupported character: %c", r)
 		default:
 			p.buf.WriteRune(r)
 		}
@@ -207,7 +207,7 @@ func (p *parser) parseDoubleQuotes() {
 			p.parseVarExpr()
 			continue
 		case '`':
-			p.errorf("unsupported character inside string: " + string(r))
+			p.errorf("unsupported character inside string: %c", r)
 		}
 		p.buf.WriteRune(r)
 	}
@@ -220,9 +220,9 @@ func (p *parser) parseVarExpr() {
 	case '{':
 		p.errorf("parameter expansion '${expression}' not supported")
 	case '@', '*', '#', '?', '-', '$', '!', '0':
-		p.errorf("special parameters not supported: $" + string(r))
+		p.errorf("special parameters not supported: $%c", r)
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		p.errorf("positional parameters not supported: $" + string(r))
+		p.errorf("positional parameters not supported: $%c", r)
 	}
 	p.backup()
 
