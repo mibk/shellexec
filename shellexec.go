@@ -55,6 +55,10 @@ func (p *parser) next() rune {
 	var size int
 	p.last, size = utf8.DecodeRuneInString(p.s)
 	p.s = p.s[size:]
+	if p.last == utf8.RuneError {
+		p.errorf("invalid UTF-8 encoding")
+		return eof
+	}
 
 	if p.last == '\\' && p.s != "" && p.s[0] == '\n' {
 		// line continuation; remove it from the input

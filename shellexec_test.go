@@ -146,6 +146,11 @@ func TestParseErrors(t *testing.T) {
 			"cat file | sort",
 			"unsupported character: |",
 		},
+		{
+			"invalid UTF-8 string",
+			"echo \x80",
+			"invalid UTF-8 encoding",
+		},
 	}
 
 	for _, tt := range tests {
