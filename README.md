@@ -6,7 +6,7 @@ of commands. Package shellexec isn't a replacement for `os/exec`. It's rather
 just a convenience package for use-cases that require/prefer having just a
 single string to define the command to execute.
 
-## Instalation
+## Installation
 
 ```bash
 $ go get github.com/mibk/shellexec
